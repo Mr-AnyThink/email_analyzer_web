@@ -1,0 +1,14 @@
+<!-- templates/upload.html -->
+
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Upload Email</h2>
+<form method="POST" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="email" class="form-label">Select .eml File</label>
+        <input class="form-control" type="file" id="email" name="email" accept=".eml" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Analyze</button>
+</form>
+{% endblock %}

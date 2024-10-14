@@ -1,0 +1,11 @@
+/* static/styles.css */
+
+body {
+    padding-top: 60px;
+}
+
+pre {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+}

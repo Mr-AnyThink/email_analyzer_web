@@ -1,0 +1,7 @@
+matplotlib
+networkx
+Flask
+flask-cors
+mail-parser
+requests
+python-dotenv

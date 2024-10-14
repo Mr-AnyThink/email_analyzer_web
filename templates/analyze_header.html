@@ -1,0 +1,14 @@
+<!-- templates/analyze_header.html -->
+
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Analyze Email Headers</h2>
+<form method="POST">
+    <div class="mb-3">
+        <label for="header" class="form-label">Paste Email Headers</label>
+        <textarea class="form-control" id="header" name="header" rows="10" required></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Analyze</button>
+</form>
+{% endblock %}

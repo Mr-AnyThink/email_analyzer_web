@@ -1,0 +1,13 @@
+<!-- templates/home.html -->
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="text-center">
+    <h1 class="mb-4">Welcome to Email Analyzer</h1>
+    <div class="d-grid gap-3 d-sm-flex justify-content-sm-center">
+        <a href="{{ url_for('upload_email') }}" class="btn btn-primary btn-lg px-4 gap-3">Upload Email</a>
+        <a href="{{ url_for('analyze_header') }}" class="btn btn-secondary btn-lg px-4 gap-3">Analyze Headers</a>
+    </div>
+</div>
+{% endblock %}
