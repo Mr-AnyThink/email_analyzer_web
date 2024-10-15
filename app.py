@@ -49,15 +49,17 @@ def fetch_osint(entity_type, value):
     params = {}
 
     if entity_type.lower() == 'ip':
-        api_url = "https://api.abuseipdb.com/api/v2/check"
+        api_url = f"https://www.virustotal.com/api/v3/ip_addresses/{value}"
         headers = {
             'Accept': 'application/json',
-            'Key': ABUSEIPDB_API_KEY
+            'x-apikey': VIRUSTOTAL_API_KEY
         }
+        '''
         params = {
             'ipAddress': value,
-            'maxAgeInDays': '90'
+            #'maxAgeInDays': '90'
         }
+        '''
     elif entity_type.lower() == 'domain':
         api_url = f"https://www.virustotal.com/api/v3/domains/{value}"
         headers = {
@@ -74,10 +76,15 @@ def fetch_osint(entity_type, value):
     try:
         # check if api_url is virustotal
         if 'virustotal' in api_url:
-            response = requests.get(api_url, headers=headers, params=params if entity_type.lower() == 'ip' else {})
-            reputaion = re.search(r'"last_analysis_stats":\s*\{"malicious":\s*(\d+)', response.text)
+            response = requests.get(api_url, headers=headers)
+            #reputaion = re.search(r'"last_analysis_stats":[\s*\{"malicious":\s*(\d+)|[\s*\{"suspicious":\s*(\d+)]', response.text)
             if response.status_code == 200:
-                return ( reputaion.group(1) + ' hits')
+                #return ( reputaion.group(1) + ' hits')
+                vt_data = response.json()
+                analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                malicious_hits = analysis_stats.get('malicious', 0)
+                suspicious_hits = analysis_stats.get('suspicious', 0)
+                return vt_data
             else:
                 logging.warning(f"OSINT data not found for {value}: {response.status_code} {response.text}")
                 return 'No Hits'
@@ -86,7 +93,7 @@ def fetch_osint(entity_type, value):
             reputaion = re.search(r'"abuseConfidenceScore":\s*(\d+)', response.text)
             if response.status_code == 200:
                 #return response.json()
-                return ( 'AbuseIP Score: ' + reputaion.group(1))
+                return (reputaion.group(1))
             else:
                 logging.warning(f"OSINT data not found for {value}: {response.status_code} {response.text}")
                 return 'No Hits'
@@ -121,7 +128,7 @@ def parse_authentication_results(headers):
           spf = re.search(r'spf=(\S+)', Authentication_Results)
           dkim = re.search(r'dkim=(\S+)', Authentication_Results)
           dmarc = re.search(r'dmarc=(\S+)', Authentication_Results)
-          dmarc_from = re.search(r'header\.from=(\S+)', Authentication_Results)
+          dmarc_from = re.search(r'header\.(from=\S+)', Authentication_Results)
 
     Received_SPF = headers.get('Received-SPF', None)
     if Received_SPF:
@@ -129,8 +136,8 @@ def parse_authentication_results(headers):
 
     dkim_signature = headers.get('DKIM-Signature', None)
     if dkim_signature:
-          dkim_d = re.search(r'd=(\S+)',dkim_signature)
-          dkim_s = re.search(r's=(\S+)',dkim_signature)
+          dkim_d = re.search(r'(d=\S+)',dkim_signature)
+          dkim_s = re.search(r'(s=\S+)',dkim_signature)
 
     auth_results['spf'] = spf.group(1) if spf else "Not Available"
     auth_results['dkim'] = dkim.group(1) if dkim else "Not Available"
@@ -175,14 +182,27 @@ def extract_hop_info(hops_headers):
         time_match = re.search(r';\s*(.*)', received)
         logging.debug(f"\ntime: {time_match.group(1)}\n")
 
+        from_ip_osint = 0
+        by_ip_osint = 0
+
         if from_match:
             hop_info['from'] = from_match.group(1)
         if from_ip:
             hop_info['from_ip'] = from_ip.group(1)
+            from_ip_osint_json = fetch_osint("ip",from_ip.group(1))
+            from_ip_osint_stats = from_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+            from_ip_osint = from_ip_osint_stats.get('malicious', 0)
+            if from_ip_osint == 0:
+               from_ip_osint = from_ip_osint_stats.get('suspicious', 0)
         if by_match:
             hop_info['by'] = by_match.group(1)
         if by_ip:
             hop_info['by_ip'] = by_ip.group(1)
+            by_ip_osint_json  = fetch_osint("ip",by_ip.group(1))
+            by_ip_osint_stats = by_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+            by_ip_osint = by_ip_osint_stats.get('malicious', 0)
+            if by_ip_osint == 0:
+               by_ip_osint = by_ip_osint_stats.get('suspicious', 0)
         if with_match:
             hop_info['with'] = with_match.group(1)
         if time_match:
@@ -218,45 +238,24 @@ def extract_hop_info(hops_headers):
         previous_time = hop_info['time']
 
         # Example Blacklist check (you can replace this with a real OSINT API call)
-        hop_info['blacklist'] = 'Not blacklisted'  # Mocked result
-
+        # check if source is blacklisted
+        
+        if from_ip_osint > 0 and by_ip_osint > 0:
+           #print(f"from_ip_osint: {from_ip_osint}")
+           hop_info['blacklist'] = "From and By Are Blacklisted"
+        elif from_ip_osint > 0:
+           hop_info['blacklist'] = "From is Blacklisted"
+        elif by_ip_osint > 0:
+           hop_info['blacklist'] = "By is Blacklisted"
+        else:
+           hop_info['blacklist'] = 'Not blacklisted'
+        
+        #hop_info['blacklist'] = 'Not blacklisted'  # Mocked result
         hops.append(hop_info)
 
     logging.debug("\n+++++++++++++++++++++++++++++++++++++\n")
 
     return hops
-
-def create_hop_graph(hops):
-    fig, ax = plt.subplots(figsize=(10, 4))
-    
-    # Calculate the number of nodes (hops) and spacing
-    num_hops = len(hops)
-    spacing = 3  # Distance between nodes
-    
-    # Position the boxes and draw arrows
-    for i, hop in enumerate(hops):
-        from_node = hop.get('from')
-        by_node = hop.get('by')
-
-        if from_node and by_node:
-            # Draw the first server box
-            box_from = FancyBboxPatch((i * spacing, 1), 2, 1, boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightblue")
-            ax.add_patch(box_from)
-            ax.text(i * spacing + 1, 1.5, from_node, ha="center", va="center", fontsize=10)
-
-            # Draw the second server box
-            box_by = FancyBboxPatch((i * spacing + spacing, 1), 2, 1, boxstyle="round,pad=0.3", edgecolor="black", facecolor="lightblue")
-            ax.add_patch(box_by)
-            ax.text(i * spacing + spacing + 1, 1.5, by_node, ha="center", va="center", fontsize=10)
-
-            # Draw the arrow connecting the boxes
-            ax.annotate("", xy=(i * spacing + 2, 1.5), xytext=(i * spacing + spacing, 1.5),
-                        arrowprops=dict(arrowstyle="->", lw=2))
-
-    # Hide axes and display the flowchart
-    ax.set_axis_off()
-    plt.title('Email Hop Travel Flowchart')
-    plt.savefig('email_hop_graph.png', bbox_inches='tight')
 
 def extract_attachments_from_eml(eml_file_path, output_dir):
     """Extract attachments from .eml file and save them to output directory."""
@@ -272,11 +271,16 @@ def extract_attachments_from_eml(eml_file_path, output_dir):
             if part.get_content_disposition() == 'attachment':
                 filename = part.get_filename()
                 if filename:
-                    file_path = os.path.join(output_dir, filename)
-                    with open(file_path, 'wb') as att_file:
-                        att_file.write(part.get_payload(decode=True))
-                    attachments.append(file_path)
-                    logging.info(f'Saved attachment: {file_path}')
+                    # Decode the payload and check if it is not None
+                    payload = part.get_payload(decode=True)
+                    if payload is not None:
+                        file_path = os.path.join(output_dir, filename)
+                        with open(file_path, 'wb') as att_file:
+                            att_file.write(payload)
+                        attachments.append(file_path)
+                        logging.info(f'Saved attachment: {file_path}')
+                    else:
+                        logging.warning(f"Attachment '{filename}' has no payload to write.")
     else:
         logging.warning("No attachments found in this email.")
 
@@ -338,14 +342,18 @@ def process_email(filepath):
              logging.debug(f"Processing attachment: {att}")
              md5, sha256 = calculate_hash(att)
              logging.debug(f"MD5: {md5}, SHA256: {sha256}")
-             osint_data = fetch_osint('hash', sha256)
+             vt_data = fetch_osint('hash', sha256)
+             analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+             malicious_hits = analysis_stats.get('malicious', 0)
+             suspicious_hits = analysis_stats.get('suspicious', 0)
              attachment_hashes.append({
                  'filename': os.path.basename(att),
                  'hash_md5': md5,       # Updated key name
                  'hash_sha256': sha256,  # Updated key name
-                 'vt': osint_data
+                 'malicious_hits': malicious_hits,
+                 'suspicious_hits': suspicious_hits
              })
-             logging.info(f"virus total hash : {osint_data}")
+             logging.info(f"virus total hash : {vt_data}")
 
          # Parse the email
          parsed = parse_from_file(filepath)
@@ -374,13 +382,24 @@ def process_email(filepath):
          # Fetch OSINT data
          osint_results = []
          for entity in entities:
-             osint_data = fetch_osint(entity['type'], entity['value'])
+             vt_data = fetch_osint(entity['type'], entity['value'])
+             analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+             malicious_hits = analysis_stats.get('malicious', 0)
+             suspicious_hits = analysis_stats.get('suspicious', 0)
+
+             whois_data = vt_data.get('data', {}).get('attributes', {})
+             whois = whois_data.get('whois','Not Available')
+             if whois is None:
+                whois = 'Not Available'
+
              osint_results.append({
                  'entity_type': entity['type'],
                  'value': entity['value'],
-                 'osint': osint_data
+                 'malicious_hits': malicious_hits,
+                 'suspicious_hits': suspicious_hits,
+                 'whois': whois
              })
-             logging.debug(f"OSINT data for {entity['type']} {entity['value']}: {osint_data}")
+             logging.debug(f"OSINT data for {entity['type']} {entity['value']}: {vt_data}")
 
          # Remove duplicate entities
          # unique_entities = { (e['type'], e['value']) for e in entities }
