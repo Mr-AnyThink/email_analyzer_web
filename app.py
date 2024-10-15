@@ -190,19 +190,21 @@ def extract_hop_info(hops_headers):
         if from_ip:
             hop_info['from_ip'] = from_ip.group(1)
             from_ip_osint_json = fetch_osint("ip",from_ip.group(1))
-            from_ip_osint_stats = from_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
-            from_ip_osint = from_ip_osint_stats.get('malicious', 0)
-            if from_ip_osint == 0:
-               from_ip_osint = from_ip_osint_stats.get('suspicious', 0)
+            if 'No Hits' not in from_ip_osint_json: # Check if Vt data returns as no hits
+                from_ip_osint_stats = from_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                from_ip_osint = from_ip_osint_stats.get('malicious', 0)
+                if from_ip_osint == 0:
+                   from_ip_osint = from_ip_osint_stats.get('suspicious', 0)
         if by_match:
             hop_info['by'] = by_match.group(1)
         if by_ip:
             hop_info['by_ip'] = by_ip.group(1)
             by_ip_osint_json  = fetch_osint("ip",by_ip.group(1))
-            by_ip_osint_stats = by_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
-            by_ip_osint = by_ip_osint_stats.get('malicious', 0)
-            if by_ip_osint == 0:
-               by_ip_osint = by_ip_osint_stats.get('suspicious', 0)
+            if 'No Hits' not in by_ip_osint_json: # Check if Vt data returns as no hits
+                by_ip_osint_stats = by_ip_osint_json.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                by_ip_osint = by_ip_osint_stats.get('malicious', 0)
+                if by_ip_osint == 0:
+                   by_ip_osint = by_ip_osint_stats.get('suspicious', 0)
         if with_match:
             hop_info['with'] = with_match.group(1)
         if time_match:
@@ -343,9 +345,12 @@ def process_email(filepath):
              md5, sha256 = calculate_hash(att)
              logging.debug(f"MD5: {md5}, SHA256: {sha256}")
              vt_data = fetch_osint('hash', sha256)
-             analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
-             malicious_hits = analysis_stats.get('malicious', 0)
-             suspicious_hits = analysis_stats.get('suspicious', 0)
+             malicious_hits = 0
+             suspicious_hits = 0
+             if 'No Hits' not in vt_data:
+                 analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                 malicious_hits = analysis_stats.get('malicious', 0)
+                 suspicious_hits = analysis_stats.get('suspicious', 0)
              attachment_hashes.append({
                  'filename': os.path.basename(att),
                  'hash_md5': md5,       # Updated key name
@@ -383,14 +388,18 @@ def process_email(filepath):
          osint_results = []
          for entity in entities:
              vt_data = fetch_osint(entity['type'], entity['value'])
-             analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
-             malicious_hits = analysis_stats.get('malicious', 0)
-             suspicious_hits = analysis_stats.get('suspicious', 0)
+             malicious_hits = 0
+             suspicious_hits = 0
+             whois = 'Not Available'
 
-             whois_data = vt_data.get('data', {}).get('attributes', {})
-             whois = whois_data.get('whois','Not Available')
-             if whois is None:
-                whois = 'Not Available'
+             if 'No Hits' not in vt_data: # Check if Vt data returns as no hits
+                 analysis_stats = vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+                 malicious_hits = analysis_stats.get('malicious', 0)
+                 suspicious_hits = analysis_stats.get('suspicious', 0)
+                 whois_data = vt_data.get('data', {}).get('attributes', {})
+                 whois = whois_data.get('whois','Not Available')
+                 if whois is None:
+                    whois = 'Not Available'
 
              osint_results.append({
                  'entity_type': entity['type'],
