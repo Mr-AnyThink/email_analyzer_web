@@ -2,13 +2,13 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-center">Analysis Results</h2>
+    <h2 class="mb-4 text-center text-primary">Analysis Results</h2>
 
     <!-- Parsed Headers Table -->
     {% if analysis.specific_headers %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-primary text-white">
-            <h4>Parsed Headers</h4>
+            <h4 class="mb-0">Parsed Headers</h4>
         </div>
         <div class="card-body">
             <table class="table table-striped">
@@ -25,7 +25,14 @@
                     <tr><td>Subject</td><td>{{ analysis.specific_headers.Subject }}</td></tr>
                     <tr><td>Message-ID</td><td>{{ analysis.specific_headers.Message_ID }}</td></tr>
                     <tr><td>Return-Path</td><td>{{ analysis.specific_headers['Return-Path'] }}</td></tr>
-                    <tr><td>Reply-To</td><td>{{ analysis.specific_headers['Reply_To'] }}</td></tr>
+                    <tr><td>Reply-To</td>
+                        <td>
+                            {{ analysis.specific_headers['Reply_To'] }}
+                            {% if analysis.specific_headers.From != analysis.specific_headers['Reply_To'] %}
+                                <span class="text-danger"> <strong>&times;</strong> From and Reply-To should be same, Potential Phishing </span>
+                            {% endif %}
+                        </td>
+                    </tr>
                     <tr><td>Received (Hop by Hop)</td>
                         <td>
                             {% if analysis.specific_headers.Received %}
@@ -48,7 +55,7 @@
     <!-- Hop Table Section -->
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-primary text-white">
-            <h4>Email Hop Travel Information</h4>
+            <h4 class="mb-0">Email Hop Travel Information</h4>
         </div>
         <div class="card-body">
             <table class="table table-striped table-bordered">
@@ -67,12 +74,26 @@
                     {% for hop in analysis.hop_analysis %}
                     <tr>
                         <td>{{ hop.hop }}</td>
-                        <td>{{ hop.from }}{% if hop.from_ip %} [{{ hop.from_ip }}]{% endif %}</td>
-                        <td>{{ hop.by }}{% if hop.by_ip %} [{{ hop.by_ip }}]{% endif %}</td>
+                        <td>
+                            {{ hop.from }}{% if hop.from_ip %} [{{ hop.from_ip }}]{% endif %}
+                            {% if hop.blacklist == "From and By Are Blacklisted" or hop.blacklist == "From is Blacklisted" %}
+                                 <span class="text-danger"><strong>&times;</strong></span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ hop.by }}{% if hop.by_ip %} [{{ hop.by_ip }}]{% endif %}
+                            {% if hop.blacklist == "From and By Are Blacklisted" or hop.blacklist == "By is Blacklisted" %}
+                                 <span class="text-danger"><strong>&times;</strong></span>
+                            {% endif %}
+                        </td>
                         <td>{{ hop.with }}</td>
                         <td>{{ hop.time }}</td>
                         <td>{{ hop.delay }}</td>
-                        <td>{{ hop.blacklist }}</td>
+                        <td>
+                            <span class="{% if 'not blacklisted' not in hop.blacklist.lower() %}text-danger{% endif %}">
+                                  {{ hop.blacklist }}
+                            </span>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -84,7 +105,7 @@
     {% if analysis.authentication %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-success text-white">
-            <h4>Authentication Results</h4>
+            <h4 class="mb-0">Authentication Results</h4>
         </div>
         <div class="card-body">
             <ul class="list-group">
@@ -98,7 +119,8 @@
                         {% else %}
                             bg-secondary
                         {% endif %}">
-                        {{ analysis.authentication.spf.upper()}} : Client IP: {{ analysis.authentication.spf_client_ip }}
+                        <i class="bi {% if analysis.authentication.spf.lower() == 'pass' %}bi-check-circle-fill{% elif analysis.authentication.spf.lower() == 'fail' %}bi-x-circle-fill{% else %}bi-question-circle{% endif %}"></i>
+                        {{ analysis.authentication.spf.upper() }} : Client IP: {{ analysis.authentication.spf_client_ip }}
                     </span>
                 </li>
                 <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -111,6 +133,7 @@
                         {% else %}
                             bg-secondary
                         {% endif %}">
+                        <i class="bi {% if analysis.authentication.dkim.lower() == 'pass' %}bi-check-circle-fill{% elif analysis.authentication.dkim.lower() == 'fail' %}bi-x-circle-fill{% else %}bi-question-circle{% endif %}"></i>
                         {{ analysis.authentication.dkim.upper() }} : {{ analysis.authentication.dkim_d.upper() }} : {{ analysis.authentication.dkim_s.upper() }}
                     </span>
                 </li>
@@ -124,7 +147,8 @@
                         {% else %}
                             bg-secondary
                         {% endif %}">
-                        {{ analysis.authentication.dmarc.upper() }} : {{  analysis.authentication.dmarc_from.upper() }}
+                        <i class="bi {% if analysis.authentication.dmarc.lower() == 'pass' %}bi-check-circle-fill{% elif analysis.authentication.dmarc.lower() == 'fail' %}bi-x-circle-fill{% else %}bi-question-circle{% endif %}"></i>
+                        {{ analysis.authentication.dmarc.upper() }} : {{ analysis.authentication.dmarc_from.upper() }}
                     </span>
                 </li>
             </ul>
@@ -136,13 +160,25 @@
     {% if analysis.urls %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-warning text-white">
-            <h4>URLs</h4>
+            <h4 class="mb-0">URLs</h4>
         </div>
         <div class="card-body">
             <ul>
+                <strong>Total URLs - {{ analysis.urls|length  }} </strong>
                 {% for url in analysis.urls %}
                 <li><a href="{{ url }}" target="_blank" class="text-primary">{{ url }}</a></li>
                 {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% else %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-warning text-white">
+            <h4 class="mb-0">URLs</h4>
+        </div>
+        <div class="card-body">
+	    <ul>
+                <strong>Total URLs - 0 </strong>
             </ul>
         </div>
     </div>
@@ -152,17 +188,35 @@
     {% if analysis.attachments %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-info text-white">
-            <h4>Attachments</h4>
+            <h4 class="mb-0">Attachments</h4>
         </div>
         <div class="card-body">
             <ul class="list-group">
+                <strong>Total Attachments - {{ analysis.attachments|length  }}</strong>
                 {% for att in analysis.attachments %}
                 <li class="list-group-item">
-                    File Name : {{ att.filename }} 
-                    <small class="text-muted"><br/>MD5: {{ att.hash_md5 }} <br/> SHA256: {{ att.hash_sha256 }} <br/> VirusTotal: {{ att.vt }}</small>
+                    <strong>File Name:</strong> {{ att.filename }}
+                    <small class="text-muted d-block">
+                                MD5: {{ att.hash_md5 }} <br/>
+                                SHA256: {{ att.hash_sha256 }} <br/> 
+                                <strong>VirusTotal:</strong> <br/>
+                                         Malicious : {{ att.malicious_hits }} <br/>
+                                         Suspicious: {{ att.suspicious_hits }} <br/>
+                    </small>
                     <a href="{{ url_for('download_file', filename=att.filename) }}" class="btn btn-sm btn-outline-primary float-end">Download</a>
                 </li>
                 {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% else %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-info text-white">
+            <h4 class="mb-0">Attachments</h4>
+        </div>
+        <div class="card-body">
+            <ul>
+                <strong>Total Attachments - 0 </strong>
             </ul>
         </div>
     </div>
@@ -172,14 +226,20 @@
     {% if analysis.osint %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-dark text-white">
-            <h4>OSINT Analysis</h4>
+            <h4 class="mb-0">OSINT Analysis</h4>
         </div>
         <div class="card-body">
             {% for item in analysis.osint %}
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title">{{ item.entity_type }}: {{ item.value }}</h5>
-                    <pre>{{ item.osint | tojson(indent=2) }}</pre>
+                    <pre class="bg-light p-2 border" style="white-space: pre-wrap;text-align: left;">
+<strong>VirusTotal:</strong>
+   <strong>Malicious: </strong>{{ item.malicious_hits }}
+   <strong>Suspicious: </strong>{{ item.suspicious_hits }} <br/>
+<strong>Whois:</strong><br/>
+{{ item.whois }}
+                    </pre>
                 </div>
             </div>
             {% endfor %}
@@ -190,14 +250,16 @@
     {% if analysis.email %}
     <div class="card mb-4 shadow-sm">
         <div class="card-header bg-dark text-white">
-            <h4>Raw Headers</h4>
+            <h4 class="mb-0">Raw Headers</h4>
         </div>
         <div class="card-body">
-            <pre class="bg-light p-3 border style="white-space: pre-wrap;">{{ analysis.email }}</pre>
+            <pre class="bg-light p-3 border" style="white-space: pre-wrap;">{{ analysis.email }}</pre>
         </div>
     </div>
     {% endif %}
 
-    <a href="{{ url_for('home') }}" class="btn btn-secondary mt-3">Back to Home</a>
+    <div class="text-center mt-4">
+        <a href="{{ url_for('home') }}" class="btn btn-secondary">Back to Home</a>
+    </div>
 </div>
 {% endblock %}
